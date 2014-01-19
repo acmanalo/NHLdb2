@@ -1,14 +1,14 @@
 from bs4 import BeautifulSoup
-import urllib
+import requests
 import re
 
 GAME_BASE_URL = "http://www.nhl.com/gamecenter/en/boxscore?id="
 
 def get_game_stats(game_id):
     stat_out = []
-    temp = []
-    f = urllib.urlopen(GAME_BASE_URL + str(game_id))
-    soup = BeautifulSoup(f)
+    
+    url = requests.get(GAME_BASE_URL + str(game_id))
+    soup = BeautifulSoup(url.content)
 
     
     game = soup.find_all(True, {'class' : ['score', 'at', 'aPP', 'aHits', 'aFOW', 'aGive',
@@ -30,7 +30,7 @@ def get_game_stats(game_id):
     
     return stat_out
 
-for i in range(2013020001,2013020050):
+for i in range(2013020001,2013020005):
     print get_game_stats(i)
 
 ##def get(soup, class_name):
