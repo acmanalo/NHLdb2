@@ -1,36 +1,54 @@
 from bs4 import BeautifulSoup
+from fractions import Fraction
+
 import requests
 import re
 
 GAME_BASE_URL = "http://www.nhl.com/gamecenter/en/boxscore?id="
 
 def get_game_stats(game_id):
+    '''
+    Takes game id and parses corresponding box score html
+
+    
+    returns [aTeam, aGoals, aPP goal, aPP opp, aHits, aFOW, aGiveaways,
+             aTakeaways, aBlocks, aPIM, hTeam, hGoals, hPP goals, hPP opp,
+             hHits, hFOW, hGiveaways, hTakeaways, hBlocks, hPIM]
+    '''
     stat_out = []
     
     url = requests.get(GAME_BASE_URL + str(game_id))
     soup = BeautifulSoup(url.content)
 
+    stats_to_find = ['score', 'at', 'aPP', 'aHits', 'aFOW', 'aGive',
+                     'aTake', 'aBlock', 'aPIM', 'ht', 'hPP','hHits',
+                     'hFOW', 'hGive', 'hTake', 'hBlock', 'hPIM']
     
-    game = soup.find_all(True, {'class' : ['score', 'at', 'aPP', 'aHits', 'aFOW', 'aGive',
-                                           'aTake', 'aBlock', 'aPIM', 'ht', 'hPP',
-                                           'hHits', 'hFOW', 'hGive', 'hTake',
-                                           'hBlock', 'hPIM']})
+    game = soup.find_all(True, {'class' : stats_to_find })
     
     stat_out.append(str(game[2].contents[0]))
-    stat_out.append(str(game[0].contents[0]))
+    stat_out.append(int(game[0].contents[0]))
+
+    [pp_goal, pp_opp] = str(game[6].contents[0]).split('/')
+    stat_out.append(int(pp_goal))
+    stat_out.append(int(pp_opp))
     
-    for i in range(6, 17, 2):
-        stat_out.append(str(game[i].contents[0]))
+    for i in range(8, 17, 2):
+        stat_out.append(int(game[i].contents[0]))
 
     stat_out.append(str(game[3].contents[0]))
-    stat_out.append(str(game[1].contents[0]))
+    stat_out.append(int(game[1].contents[0]))
+
+    [pp_goal, pp_opp] = str(game[7].contents[0]).split('/')
+    stat_out.append(int(pp_goal))
+    stat_out.append(int(pp_opp))
     
-    for i in range(7, 18, 2):
-        stat_out.append(str(game[i].contents[0]))
+    for i in range(9, 18, 2):
+        stat_out.append(int(game[i].contents[0]))
     
     return stat_out
 
-for i in range(2013020001,2013020005):
+for i in range(2013020001,2013020101):
     print get_game_stats(i)
 
 ##def get(soup, class_name):
