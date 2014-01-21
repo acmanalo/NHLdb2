@@ -2,9 +2,11 @@ from bs4 import BeautifulSoup
 from fractions import Fraction
 from time import strptime
 
+import sqlite3
 import requests
 import re
 
+START_ID = 2013020001
 SCHED_URL = 'http://www.nhl.com/ice/schedulebyseason.htm?season=20132014'
 GAME_BASE_URL = 'http://www.nhl.com/gamecenter/en/boxscore?id='
 
@@ -106,13 +108,14 @@ def get_stats(game_id):
 
         stats_out.insert(len(stats_out)/2 + 1, stats['score_hm'])
         stats_out.insert(1, stats['score_aw'])
+
         
             
         return stats_out
     except:
         return "Failed. :("
 
-def get_newest():
+def get_newest_id():
     '''
     Returns the gameid of the most recently  completed game
     '''
@@ -127,16 +130,15 @@ def get_newest():
 
         Use the first table (all games completed) for previous seasons.
         '''
-        S = tables[1].find_all(class_='skedLinks')
+        completed_games = tables[1].find_all(class_='skedLinks')
     except:
-        S = tables[0].find_all(class_='skedLinks')
-        
-    for s in S:
-        game_link = s.find('a').get('href')
-        newest = str(game_link)[-10:]       #game id is the final 10 characters
+        completed_games = tables[0].find_all(class_='skedLinks')
 
-    return newest
-
+    most_recent = completed_games[-1]
+    a = most_recent.find('a')
+    most_recent_id = a.get('href')[-10:] #game id is the final 10 characters
+    
+    return most_recent_id 
 
 def parse_date(date_string):
     '''
@@ -148,14 +150,25 @@ def parse_date(date_string):
     date = strptime(date_string, "%a %b %d, %Y")
     return int(`date.tm_year` + str(date.tm_mon).zfill(2) + `date.tm_mday`)
 
-
-
 def main():
-    print get_newest()
+    conn = sqlite3.connect('nhl_games.db')
+##    conn.execute('''CREATE TABLE Games
+##                    (GameID int primary key, Away text not null, AwayGoals int not null,
+##                    Home text not null, HomeGoals int not null);''')
+##
+##    for i in range(START_ID, START_ID + 100):
+##        print i
+##        game = get_stats(i)
+##        conn.execute('''INSERT INTO Games  VALUES (?, ?, ?, ?, ?)''', (i, game[0], game[1], game[13], game[14]))
+##
+##        conn.commit()
 
-    start = 2013020001
-    for i in range(start, start + 10):
-        print get_stats(i)
-        
+    cursor = conn.execute('SELECT GameID, Away, AwayGoals, Home, HomeGoals from Games')
+
+    for row in cursor:
+        print row[0], '-', row[1], '-', row[2], ' @ ', row[3], '-', row[4]
+
+    conn.close()
+    
 if __name__ == "__main__":
     main()
