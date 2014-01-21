@@ -1,8 +1,10 @@
 from bs4 import BeautifulSoup
 from fractions import Fraction
+from time import strptime
 
 import requests
 import re
+
 
 GAME_BASE_URL = "http://www.nhl.com/gamecenter/en/boxscore?id="
 
@@ -48,9 +50,16 @@ def get_game_stats(game_id):
     
     return stat_out
 
-for i in range(2013020001,2013020101):
-    print get_game_stats(i)
+def get_date(date_string):
+    '''
+    Parse the date from NHL.com's format of dates
 
+    Return int in the form of [year][month][day]
+    '''
+    date = strptime(date_string, "%a %b %d, %Y")
+    return int(`date.tm_year` + str(date.tm_mon).zfill(2) + `date.tm_mday`)
+        
+print get_date("Mon Jan 10, 2014")
 ##def get(soup, class_name):
 ##    return str(soup.find(class_=class_name).contents[0])
 ##
