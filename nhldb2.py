@@ -7,8 +7,9 @@ import requests
 import re
 
 START_ID = 2013020001
-SCHED_URL = 'http://www.nhl.com/ice/schedulebyseason.htm?season=20132014'
-GAME_BASE_URL = 'http://www.nhl.com/gamecenter/en/boxscore?id='
+SCHED_BASE_URL = 'http://www.nhl.com/ice/schedulebyseason.htm?season='
+BOX_BASE_URL = 'http://www.nhl.com/gamecenter/en/boxscore?id='
+RECAP_BASE_URL = 'http://www.nhl.com/gamecenter/en/recap?id='
 
 def soupify(url_to_soup):
     url = requests.get(url_to_soup)
@@ -28,7 +29,7 @@ def get_stats(game_id):
         return str(fraction).split('/')
     
     try:
-        soup = soupify(GAME_BASE_URL + str(game_id))
+        soup = soupify(BOX_BASE_URL + str(game_id))
 
         stats_to_find = ['score',
                          'at',
@@ -115,12 +116,8 @@ def get_stats(game_id):
     except:
         return "Failed. :("
 
-def get_newest_id():
-    '''
-    Returns the gameid of the most recently  completed game
-    '''
-    
-    soup = soupify(SCHED_URL)
+def get_valid_table(season): #season in [beginning year][ending year] format
+    soup = soupify(SCHED_BASE_URL + str(season))
 
     tables = soup.find_all('tbody')
 
@@ -130,45 +127,149 @@ def get_newest_id():
 
         Use the first table (all games completed) for previous seasons.
         '''
-        completed_games = tables[1].find_all(class_='skedLinks')
+        valid_table = tables[1]
     except:
-        completed_games = tables[0].find_all(class_='skedLinks')
+        valid_table = tables[0]
 
-    most_recent = completed_games[-1]
-    a = most_recent.find('a')
-    most_recent_id = a.get('href')[-10:] #game id is the final 10 characters
+    return valid_table
+
+def get_newest_id(season): #season in [beginning year][ending year] format
+    '''
+    Returns the gameid of the most recently  completed game
+    '''
+    completed_games = get_valid_table(season).find_all(class_='skedLinks')
     
-    return most_recent_id 
+    most_recent = completed_games[-1]
+    most_recent_id = most_recent.find('a').get('href')[-10:] #id is final 10 characters
 
-def parse_date(date_string):
+    return most_recent_id
+
+def parse_date(nhl_date_string):
     '''
     Parse the date from NHL.com's format of dates
 
-    Return int in the form of [year][month][day]
+    Return str in the form of yyyymmdd
     '''
+    date = strptime(nhl_date_string, "%a %b %d, %Y")
+    return `date.tm_year` + str(date.tm_mon).zfill(2) + str(date.tm_mday).zfill(2)
+
+def id_to_date(game_id, table):
+    '''
+    Takes 10 digit game id and table in which to search.
     
-    date = strptime(date_string, "%a %b %d, %Y")
-    return int(`date.tm_year` + str(date.tm_mon).zfill(2) + `date.tm_mday`)
+    Returns date in NHL date format
+    '''
+    game_id_str = str(game_id)
+    game_url = RECAP_BASE_URL + game_id_str
 
-def main():
-    conn = sqlite3.connect('nhl_games.db')
-##    conn.execute('''CREATE TABLE Games
-##                    (GameID int primary key, Away text not null, AwayGoals int not null,
-##                    Home text not null, HomeGoals int not null);''')
-##
-##    for i in range(START_ID, START_ID + 100):
-##        print i
-##        game = get_stats(i)
-##        conn.execute('''INSERT INTO Games  VALUES (?, ?, ?, ?, ?)''', (i, game[0], game[1], game[13], game[14]))
-##
-##        conn.commit()
+    row = table.find(href=game_url)
 
-    cursor = conn.execute('SELECT GameID, Away, AwayGoals, Home, HomeGoals from Games')
 
+    row_parent = row.find_parent('tr')
+
+    date = row_parent.find(class_='skedStartDateSite').get_text()
+    
+    return date
+
+def get_date_range(beginning_id, end_id):
+    '''
+    Takes beginning game id and option end game id
+    
+    '''
+    beg = int(beginning_id)
+    end = int(end_id)
+
+    id_range = range(beg, end + 1)
+
+    beg_year = str(beginning_id)[:4]
+    end_year = str(int(beg_year) + 1)
+    season = beg_year + end_year
+
+    table = get_valid_table(season)
+    
+    date_range = []
+    for i in id_range:
+        date = id_to_date(i, table)
+        date_range.append(parse_date(str(date)))
+
+    return date_range
+
+def create_date_table():
+    conn = sqlite3.connect('nhl.db')
+    conn.execute('''CREATE TABLE Dates
+                 (GameId int primary key, Year int not null, Month int not null,
+                 Day int not null);''')
+
+    conn.commit()
+    conn.close()
+
+def decompose_date(date):
+    '''
+    date is 8-digit date in form of yyyymmdd
+
+    returns tuple [yyyy, mm, dd]
+    '''
+
+    return [str(date)[:4], str(date)[4:6], str(date)[6:8]]
+    
+                 
+def store_dates(beginning_id, end_id = 0):
+    try:             
+        create_date_table()
+    except:
+        print 'Table already exists.'
+        
+    beg = int(beginning_id)
+    if end_id == 0: end = beg
+    else: end = int(end_id)
+    
+    ids = range(beg, end + 1)
+    dates = get_date_range(beg, end)
+
+    zipped = []
+
+    for i in range(0, len(dates)):
+        decomposed_date = decompose_date(dates[i])
+        zipped.append((ids[i], int(decomposed_date[0]),
+                       int(decomposed_date[1]), int(decomposed_date[2])))
+    
+    conn = sqlite3.connect('nhl.db')
+    
+    conn.executemany('INSERT INTO Dates VALUES (?, ?, ?, ?)', zipped)
+
+    conn.commit()
+    conn.close()
+
+def print_dates():
+    conn = sqlite3.connect('nhl.db')
+
+    cursor = conn.execute('SELECT * from Dates')
+    
     for row in cursor:
-        print row[0], '-', row[1], '-', row[2], ' @ ', row[3], '-', row[4]
+        print row
 
     conn.close()
+
+def main():
+    print_dates()
+##    conn = sqlite3.connect('nhl_games.db')
+####    conn.execute('''CREATE TABLE Games
+####                    (GameID int primary key, A text not null, AwayScore int not null,
+####                    H text not null, HScore int not null);''')
+####
+####    for i in range(START_ID, START_ID + 100):
+####        print i
+####        game = get_stats(i)
+####        conn.execute('''INSERT INTO Games  VALUES (?, ?, ?, ?, ?)''', (i, game[0], game[1], game[13], game[14]))
+####
+####        conn.commit()
+##
+##    cursor = conn.execute('SELECT GameID, Away, AwayGoals, Home, HomeGoals from Games')
+##
+##    for row in cursor:
+##        print row[0], '-', row[1], '-', row[2], ' @ ', row[3], '-', row[4]
+##
+##    conn.close()
     
 if __name__ == "__main__":
     main()
