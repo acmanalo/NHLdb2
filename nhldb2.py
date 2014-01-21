@@ -5,7 +5,14 @@ from time import strptime
 import requests
 import re
 
-GAME_BASE_URL = "http://www.nhl.com/gamecenter/en/boxscore?id="
+SCHED_URL = 'http://www.nhl.com/ice/schedulebyseason.htm?season=20132014'
+GAME_BASE_URL = 'http://www.nhl.com/gamecenter/en/boxscore?id='
+
+def soupify(url_to_soup):
+    url = requests.get(url_to_soup)
+    soup = BeautifulSoup(url.content)
+
+    return soup
 
 def get_stats(game_id):
     '''
@@ -19,13 +26,27 @@ def get_stats(game_id):
         return str(fraction).split('/')
     
     try:
-        url = requests.get(GAME_BASE_URL + str(game_id))
-        soup = BeautifulSoup(url.content)
+        soup = soupify(GAME_BASE_URL + str(game_id))
 
-        stats_to_find = ['score', 'at', 'aPP', 'aHits', 'aFOW', 'aGive',
-                         'aTake', 'aBlock', 'aPIM', 'aShots',
-                         'ht', 'hPP','hHits','hFOW', 'hGive', 'hTake', 'hBlock',
-                         'hShots', 'hPIM']
+        stats_to_find = ['score',
+                         'at',
+                         'aPP',
+                         'aHits',
+                         'aFOW',
+                         'aGive',
+                         'aTake',
+                         'aBlock',
+                         'aPIM',
+                         'aShots',
+                         'ht',
+                         'hPP',
+                         'hHits',
+                         'hFOW',
+                         'hGive',
+                         'hTake',
+                         'hBlock',
+                         'hShots',
+                         'hPIM']
         
         game = soup.find_all(True, {'class' : stats_to_find })
         stats = {}
@@ -65,8 +86,18 @@ def get_stats(game_id):
             except:
                 continue
             
-        output_order = ['t', 'Shots1', 'Shots2', 'Shots3', 'PPg', 'PPo', 'Hits',
-                        'FOW', 'Give', 'Take', 'Block', 'PIM']
+        output_order = ['t',
+                        'Shots1',
+                        'Shots2',
+                        'Shots3',
+                        'PPg',
+                        'PPo',
+                        'Hits',
+                        'FOW',
+                        'Give',
+                        'Take',
+                        'Block',
+                        'PIM']
         
         stats_out = []
         for site in ['a', 'h']:         #append away stats then home
@@ -81,51 +112,50 @@ def get_stats(game_id):
     except:
         return "Failed. :("
 
+def get_newest():
+    '''
+    Returns the gameid of the most recently  completed game
+    '''
+    
+    soup = soupify(SCHED_URL)
+
+    tables = soup.find_all('tbody')
+
+    try:
+        '''
+        Second table in tables exists only in most recent season.
+
+        Use the first table (all games completed) for previous seasons.
+        '''
+        S = tables[1].find_all(class_='skedLinks')
+    except:
+        S = tables[0].find_all(class_='skedLinks')
+        
+    for s in S:
+        game_link = s.find('a').get('href')
+        newest = str(game_link)[-10:]       #game id is the final 10 characters
+
+    return newest
+
+
 def parse_date(date_string):
     '''
     Parse the date from NHL.com's format of dates
 
     Return int in the form of [year][month][day]
     '''
+    
     date = strptime(date_string, "%a %b %d, %Y")
     return int(`date.tm_year` + str(date.tm_mon).zfill(2) + `date.tm_mday`)
 
-start = 2013020001
-
-for i in range(start, start + 100):
-    print get_stats(i)
 
 
-##def get_game(
-##        
+def main():
+    print get_newest()
 
-
-##def get(soup, class_name):
-##    return str(soup.find(class_=class_name).contents[0])
-##
-##def get_team_stats(soup, home_or_away):
-##    site = 'hm' if home_or_away == 'h' else 'aw'
-##    goals = get(soup, 'score ' + site)
-##    
-##    team =      get(soup, home_or_away + 't')
-##    powerplay = get(soup, home_or_away + 'PP')
-##    hits =      get(soup, home_or_away + 'Hits')
-##    faceoffs =  get(soup, home_or_away + 'FOW')
-##    giveaways = get(soup, home_or_away + 'Give')
-##    takeaways = get(soup, home_or_away + 'Take')
-##    blocks =    get(soup, home_or_away + 'Block')
-##    penmins =   get(soup, home_or_away + 'PIM')
-##
-##    return [team, goals, powerplay, hits, faceoffs, giveaways,
-##            takeaways, blocks, penmins]
-##
-##class game:
-##    def __init__(self, game_id):
-##        
-##
-##    def get_game_stats(self):
-##        return [get_team_stats(self.soup, 'a'),
-##                get_team_stats(self.soup, 'h')]
-##
-##for i in range(2013020001, 2013020005):
-##    print game(i).get_game_stats()
+    start = 2013020001
+    for i in range(start, start + 10):
+        print get_stats(i)
+        
+if __name__ == "__main__":
+    main()
