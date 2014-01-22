@@ -7,7 +7,7 @@ import requests
 import re
 
 START_ID = 2013020001
-DATABASE = 'nhl.db'
+DATABASE = 'nhl2013.db'
 SCHED_BASE_URL = 'http://www.nhl.com/ice/schedulebyseason.htm?season='
 BOX_BASE_URL = 'http://www.nhl.com/gamecenter/en/boxscore?id='
 RECAP_BASE_URL = 'http://www.nhl.com/gamecenter/en/recap?id='
@@ -94,32 +94,10 @@ def id_to_stats(game_id):
                 stats[val] = int(stats[val])
             except:
                 stats[val] = str(stats[val])
-            
-##        output_order = ['t',
-##                        'Shots1',
-##                        'Shots2',
-##                        'Shots3',
-##                        'PPg',
-##                        'PPo',
-##                        'Hits',
-##                        'FOW',
-##                        'Give',
-##                        'Take',
-##                        'Block',
-##                        'PIM']
-##        
-##        stats_out = []
-##        for site in ['a', 'h']:         #append away stats then home
-##            for i in output_order:      #append stats in order of output_order
-##                stats_out.append(stats[site + i])
-##
-##        stats_out.insert(len(stats_out)/2 + 1, stats['score_hm'])
-##        stats_out.insert(1, stats['score_aw'])
         
         return stats
-    except:
-        return "Failed. :("
-
+    except Exception:
+        pass
     
 def get_valid_table(season): #season in [beginning year][ending year] format
     soup = soupify(SCHED_BASE_URL + str(season))
@@ -138,16 +116,16 @@ def get_valid_table(season): #season in [beginning year][ending year] format
 
     return valid_table
 
-def get_newest_id(season): #season in [beginning year][ending year] format
+def get_last_id(season): #season in [beginning year][ending year] format
     '''
     Returns the gameid of the most recently  completed game
     '''
     completed_games = get_valid_table(season).find_all(class_='skedLinks')
     
-    most_recent = completed_games[-1]
-    most_recent_id = most_recent.find('a').get('href')[-10:] #id is final 10 characters
+    last = completed_games[-1]
+    last_id = last.find('a').get('href')[-10:] #id is final 10 characters
 
-    return most_recent_id
+    return last_id
 
 def parse_date(nhl_date_string):
     '''
@@ -166,16 +144,17 @@ def id_to_date(game_id, table):
     '''
     game_id_str = str(game_id)
     game_url = RECAP_BASE_URL + game_id_str
+    try:
+        row = table.find(href=game_url)
 
-    row = table.find(href=game_url)
+        row_parent = row.find_parent('tr')
 
+        date = row_parent.find(class_='skedStartDateSite').get_text()
 
-    row_parent = row.find_parent('tr')
-
-    date = row_parent.find(class_='skedStartDateSite').get_text()
+        return date
+    except Exception:
+        pass
     
-    return date
-
 def get_stats_range(beginning_id, end_id):
     beg = int(beginning_id)
     end = int(end_id)
@@ -189,21 +168,25 @@ def get_stats_range(beginning_id, end_id):
     
     for i in id_range:
         s = id_to_stats(i)
-        ordered = []
-        for site in ['a', 'h']:
-            for cat in stat_order:
-                ordered.append(s[str(site + cat)])
+        try:
+            ordered = []
+            for site in ['a', 'h']:
+                for cat in stat_order:
+                    key = str(site + cat)
+                    ordered.append(s.get(key))
+            print i
+            ordered.insert(len(ordered)/2 + 1, s['score_hm'])
+            ordered.insert(1, s['score_aw'])
 
-        ordered.insert(len(ordered)/2 + 1, s['score_hm'])
-        ordered.insert(1, s['score_aw'])
+            ordered.append(s.get('aShotsP4', None))
+            ordered.append(s.get('hShotsP4', None))
 
-        ordered.append(s.get('aShotsP4', None))
-        ordered.append(s.get('hShotsP4', None))
-
-        ordered.insert(0, i)
-        
-        stats_range_out.append(ordered)
-
+            ordered.insert(0, i)
+            
+            stats_range_out.append(ordered)
+        except Exception:
+            print 'Failed on', i
+            pass
     return stats_range_out
 
 def get_date_range(beginning_id, end_id):
@@ -225,7 +208,10 @@ def get_date_range(beginning_id, end_id):
     date_range = []
     for i in id_range:
         date = id_to_date(i, table)
-        date_range.append(parse_date(str(date)))
+        try:
+            date_range.append(parse_date(str(date)))
+        except Exception:
+            pass
 
     return date_range
 
@@ -263,10 +249,14 @@ def store_dates(beginning_id, end_id = 0):
 
     zipped = []
 
-    for i in range(0, len(ids)):
-        decomposed_date = decompose_date(dates[i])
-        zipped.append((ids[i], int(decomposed_date[0]),
-                       int(decomposed_date[1]), int(decomposed_date[2])))
+    for i in range(0, len(dates)):
+        skipped = 0
+        try:
+            decomposed_date = decompose_date(dates[i])
+            zipped.append((ids[i+skipped], int(decomposed_date[0]),
+                           int(decomposed_date[1]), int(decomposed_date[2])))
+        except Exception:
+             skipped+=1
     
     conn = sqlite3.connect(DATABASE)
     
@@ -285,10 +275,10 @@ def store_stats(beginning_id, end_id = 0):
     
     zipped = []
 
-    for i in range(0, len(ids)):
+    for i in range(0, len(stats)):
         zipped.append(stats[i])
         
-        print 'GameID', ids[i], 'zipped.'
+        print 'GameID', ids[i], 'parsed.'
 
     conn = sqlite3.connect(DATABASE)
     conn.executemany('''INSERT INTO Games VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
@@ -358,10 +348,36 @@ def create_stats_table():
     
     conn.close()
 
-def main():
+def print_joined():
+    conn = sqlite3.connect(DATABASE)
+
+    cursor = conn.execute('''SELECT * FROM Dates NATURAL JOIN Games WHERE Away = 'SJS' OR Home = 'SJS';''')
+    
+    for row in cursor:
+        print row
+
+    conn.close()
+
+def create_updated_db(current_season):
+    '''
+    In:
+        current_season: [beginning_year][ending_year] in yyyyyyyy format
+    '''
+
+    create_date_table()
     create_stats_table()
-    store_stats(START_ID, START_ID + 20)
-    print_stats()
+
+##    store_stats(2013020645, get_last_id(current_season))
+##    store_dates(2013020645, get_last_id(current_season))
+##
+    store_stats(START_ID, get_last_id(current_season))
+    store_dates(START_ID, get_last_id(current_season))
+
+def main():
+    create_updated_db(20132014)
+
+    print_joined()
+    
     
 ##    conn = sqlite3.connect('nhl_games.db')
 ####    conn.execute('''CREATE TABLE Games
