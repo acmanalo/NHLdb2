@@ -81,7 +81,7 @@ def id_to_stats(game_id):
             if period == '1st': period_append = '1'
             elif period == '2nd' : period_append = '2'
             elif period == '3rd' : period_append = '3'
-            elif period == 'OT' : period_append = 'Ot'
+            elif period == 'OT' : period_append = '4'
 
             key = period_shot['class'][0] + 'P' + period_append
 
@@ -93,7 +93,7 @@ def id_to_stats(game_id):
             try:
                 stats[val] = int(stats[val])
             except:
-                continue
+                stats[val] = str(stats[val])
             
 ##        output_order = ['t',
 ##                        'Shots1',
@@ -183,10 +183,26 @@ def get_stats_range(beginning_id, end_id):
     id_range = range(beg, end + 1)
 
     stats_range_out = []
-
+    
+    stat_order = ['t', 'ShotsP1', 'ShotsP2', 'ShotsP3', 'PPg', 'PPo', 'Hits',
+                      'FOW', 'Give', 'Take', 'Block', 'PIM']
+    
     for i in id_range:
         s = id_to_stats(i)
-        stats_range_out.append(s)
+        ordered = []
+        for site in ['a', 'h']:
+            for cat in stat_order:
+                ordered.append(s[str(site + cat)])
+
+        ordered.insert(len(ordered)/2 + 1, s['score_hm'])
+        ordered.insert(1, s['score_aw'])
+
+        ordered.append(s.get('aShotsP4', None))
+        ordered.append(s.get('hShotsP4', None))
+
+        ordered.insert(0, i)
+        
+        stats_range_out.append(ordered)
 
     return stats_range_out
 
@@ -270,20 +286,16 @@ def store_stats(beginning_id, end_id = 0):
     zipped = []
 
     for i in range(0, len(ids)):
-        ordered_stats = [ids[i]]
-        for cat in stats[i]:
-            ordered_stats.append(stats[i][cat])
-        print len(ordered_stats)
-        zipped.append(ordered_stats)
+        zipped.append(stats[i])
         
         print 'GameID', ids[i], 'zipped.'
 
     conn = sqlite3.connect(DATABASE)
     conn.executemany('''INSERT INTO Games VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
-                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', zipped)
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', zipped)
 
     conn.commit()
-    con.close()
+    conn.close()
         
 def print_dates():
     conn = sqlite3.connect(DATABASE)
@@ -295,7 +307,7 @@ def print_dates():
 
     conn.close()
 
-def print_games():
+def print_stats():
     conn = sqlite3.connect(DATABASE)
 
     cursor = conn.execute('SELECT * FROM Games')
@@ -312,30 +324,33 @@ def create_stats_table():
                      (GameId    int         primary key,
                      Away       text        not null,
                      AScore     int         not null,
-                     AShots1P   int,
-                     AShots2p   int,
-                     AShots3p   int,
-                     APPGoals   int,
-                     APPOpps    int,
-                     AHits      int,
-                     AFaceOffWins int,
-                     AGiveaways int,
-                     ATakeAways int,
-                     ABlockedShots int,
-                     APenaltyMins int,
+                     AShots1P   int         not null,
+                     AShots2p   int         not null,
+                     AShots3p   int         not null,
+                     APPGoals   int         not null,
+                     APPOpps    int         not null,
+                     AHits      int         not null,
+                     AFaceOffWins int       not null,
+                     AGiveaways int         not null,
+                     ATakeAways int         not null,
+                     ABlockedShots int      not null,
+                     APenaltyMins int       not null,
                      Home       text        not null,
                      HScore     int         not null,
-                     HShots1P   int,
-                     HShots2p   int,
-                     HShots3p   int,
-                     HPPGoals   int,
-                     HPPOpps    int,
-                     HHits      int,
-                     HFaceOffWins int,
-                     HGiveaways int,
-                     HTakeAways int,
-                     HBlockedShots int,
-                     HPenaltyMins int);''')
+                     HShots1P   int         not null,
+                     HShots2p   int         not null,
+                     HShots3p   int         not null,
+                     HPPGoals   int         not null,
+                     HPPOpps    int         not null,
+                     HHits      int         not null,
+                     HFaceOffWins int       not null,
+                     HGiveaways int         not null,
+                     HTakeAways int         not null,
+                     HBlockedShots int      not null,
+                     HPenaltyMins int       not null,
+                     AShotsP4  int,
+                     HShotsP4  int);''')
+        
 
         conn.commit()
     except:
@@ -345,8 +360,8 @@ def create_stats_table():
 
 def main():
     create_stats_table()
-    store_stats(START_ID, START_ID+10)
-    print_games()
+    store_stats(START_ID, START_ID + 20)
+    print_stats()
     
 ##    conn = sqlite3.connect('nhl_games.db')
 ####    conn.execute('''CREATE TABLE Games
